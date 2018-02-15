@@ -41,19 +41,7 @@
 #include "stm32f4xx_hal.h"
 
 /* USER CODE BEGIN Includes */
-#define SEG7_A GPIO_PIN_7			//Pin PE7  brown cable
-#define SEG7_B GPIO_PIN_8			//Pin PE8  brown cable
-#define SEG7_C GPIO_PIN_9			//Pin PE9  yellow cable
-#define SEG7_D GPIO_PIN_10		//Pin PE10 yellow cable
-#define SEG7_E GPIO_PIN_11		//Pin PE11 gray cable
-#define SEG7_F GPIO_PIN_12		//Pin PE12 gray cable
-#define SEG7_G GPIO_PIN_13		//Pin PE13 green cable
-#define SEG7_DP GPIO_PIN_14		//Pin PE14 green cable
 
-#define SEG7_OUT1 GPIO_PIN_2		//Pin PE2 white cable
-#define SEG7_OUT2 GPIO_PIN_4		//Pin PE4 red cable
-#define SEG7_OUT3 GPIO_PIN_5		//Pin PE5 brown cable
-#define SEG7_OUT4 GPIO_PIN_6		//Pin PE6 white cable 
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
@@ -62,11 +50,23 @@ ADC_HandleTypeDef hadc1;
 DAC_HandleTypeDef hdac;
 
 /* USER CODE BEGIN PV */
+/* Global variables ----------------------------------------------------------*/
+volatile int adcTimer = 0;
+volatile int updateMeasureForDisplayTimer = 500000;
+volatile int display7segTimer = 0;
+volatile int digitToDisplay = 0;
+volatile int timeDisplay1DigitTimer = 0;
+
 /* Private variables ---------------------------------------------------------*/
 int x[] = {0, 0, 0, 0, 0};
 float b[] = {0.2, 0.2, 0.2, 0.2, 0.2};
 volatile int sysTickFlag;
 int displayMode = 0;
+
+int count = 0;
+float min_val = 10.0;
+float max_val = 0.0;
+float rms_counter = 0.0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -78,6 +78,8 @@ void FIR_C(int input, float *output);
 void plot_point(float, float *);
 int blueButtonPressed();
 void displayLEDValue(int number, int position);
+void display(float value);
+int getDigit(float value, int place);
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
 
@@ -116,13 +118,15 @@ int main(void)
   MX_DAC_Init();
 
   /* USER CODE BEGIN 2 */
-	int adc_val;
+	int adc_val; // 
 	float filtered_val = 0.0;
+	float results[3];
+	
 	
 	HAL_ADC_Start_IT(&hadc1);
 	
 	// Give a initial DAC value
-	int dac_val = 0x01;
+	int dac_val = 0x60;
 	HAL_DAC_Start(&hdac, DAC_CHANNEL_1);
 	HAL_DAC_SetValue(&hdac, DAC_CHANNEL_1, DAC_ALIGN_8B_R, dac_val); 
   /* USER CODE END 2 */
@@ -131,11 +135,28 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-		//when in sysTick
-			if (sysTickFlag == 1){
-				sysTickFlag = 0;
+		if (adcTimer >= ADC_PERIOD) { 								/* 50Hz */
+			adcTimer = 0;
+			HAL_ADC_Start(&hadc1); 								/* start ADC conversion */
+			
+			/* wait for the conversion to be done and get data */
+			if (HAL_ADC_PollForConversion(&hadc1, 1000000) == HAL_OK) { 
+				adc_val = HAL_ADC_GetValue(&hadc1); /* get the value */
 				
-				// When holding the blue button on the board, switch display mode by turn on LED 
+				FIR_C(adc_val, &filtered_val);
+				float voltage_reading = 3.3 * filtered_val / 255.0;
+				
+				plot_point(voltage_reading, results);
+				
+				printf("MRS: %f, MIN: %f, MAX: %f\n", results[0], results[1], results[2]);
+
+			}
+		}
+		
+		if(display7segTimer >= DISPLAY_7_SEGMENT_PERIOD) {
+			display7segTimer = 0;
+			
+			// When holding the blue button on the board, switch display mode by turn on LED 
 				if ( blueButtonPressed() == 1){
 				  displayMode = displayMode + 1;
 					displayMode = displayMode % 3;
@@ -145,37 +166,23 @@ int main(void)
 				HAL_GPIO_WritePin(GPIOD, LD3_Pin, GPIO_PIN_RESET);
 				switch(displayMode) {
 					case 0:
-						HAL_GPIO_WritePin(GPIOD, LD6_Pin, GPIO_PIN_SET);
+						HAL_GPIO_WritePin(GPIOD, LD6_Pin, GPIO_PIN_SET);//MRS BLUE
 						break;
 					case 1:
-						HAL_GPIO_WritePin(GPIOD, LD4_Pin, GPIO_PIN_SET);
+						HAL_GPIO_WritePin(GPIOD, LD4_Pin, GPIO_PIN_SET);//MIN	GREEN
 						break;
 					case 2:
-						HAL_GPIO_WritePin(GPIOD, LD3_Pin, GPIO_PIN_SET);
+						HAL_GPIO_WritePin(GPIOD, LD3_Pin, GPIO_PIN_SET);//MAX	ORANGE
 						break;
 					default:
-						break;
-				}
+						break;		
+				}	
 				
-				//acquire value from ADC 
-//				adc_val = HAL_ADC_GetValue(&hadc1);
-//				FIR_C(adc_val, &filtered_val);
-//				float voltage_reading = 3.3 * filtered_val / 255.0;
-//				float results[3];
-//				plot_point(voltage_reading, results);
-//				printf("MRS: %f", results[0]);
-//				printf("min: %f", results[1]);
-//				printf("max: %f", results[2]);
-				
-				//output to 7-segment display
-//				displayLEDValue((int)(results[displayMode] * 100) % 100, 2);
-//				displayLEDValue((int)(results[displayMode] * 10) % 10, 3);
-//				displayLEDValue((int)results[displayMode], 4);
-				displayLEDValue(1, 2);
-				displayLEDValue(2, 3);
+			display(results[displayMode]); 														/* display on 7-segment display */
+			//displayLEDValue(2, 4);
 		}
 				
-		}
+	}
   /* USER CODE END 3 */
 
 }
@@ -223,10 +230,8 @@ void SystemClock_Config(void)
     _Error_Handler(__FILE__, __LINE__);
   }
 
-    /**Configure the Systick interrupt time 
-			 50 Hz sampling frequency
-    */
-  HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq()/20);
+   /* Configure SysTick to generate an interrupt every microsecond */
+  HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq()/1000000);
 
     /**Configure the Systick 
     */
@@ -461,6 +466,30 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void display(float value) {
+		/* change the digit to be viewed slower for the 7-segment slower for better display */
+		if (timeDisplay1DigitTimer >= TIME_DISPLAY_1_DIGIT_PERIOD) {
+			timeDisplay1DigitTimer = 0;
+			digitToDisplay = (digitToDisplay + 1) % 3;
+		}
+		//display digits from left side, +1 for seven segments digit offset
+	displayLEDValue(getDigit(value, digitToDisplay), digitToDisplay + 2);
+}
+
+int getDigit(float value, int place) {
+	int tmp = (int) (value * 100);
+	switch (place) {
+		case 0:
+			return (tmp - tmp % 100) / 100;
+		case 1:
+			return (tmp % 100 - tmp % 10) / 10;
+		case 2:
+			return tmp % 10;
+		default:
+			return 0;
+	}
+}
+
 int blueButtonPressed(){
 	if ( HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0 ) == SET) {
 		return 1;
@@ -473,10 +502,6 @@ int blueButtonPressed(){
 
 
 void plot_point(float input, float* output) {
-	static int count = 0;
-	static float min_val = 10.0;
-	static float max_val = 0.0;
-	static float rms_counter = 0.0;
 	if(count == 0) {
 		min_val = input;
 		max_val = input;
@@ -486,7 +511,7 @@ void plot_point(float input, float* output) {
 		else if(input > max_val) max_val = input;
 		rms_counter += input * input;
 	}
-	count = (count + 1) % 200;
+	count = (count + 1) % 500;
 	output[0] = sqrt(rms_counter / count);
 	output[1] = min_val;
 	output[2] = max_val;

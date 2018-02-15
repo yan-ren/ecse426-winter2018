@@ -35,13 +35,14 @@
 #include "stm32f4xx.h"
 #include "stm32f4xx_it.h"
 
+#include "main.h"
+
 /* USER CODE BEGIN 0 */
 
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
 extern ADC_HandleTypeDef hadc1;
-extern volatile int sysTickFlag;
 /******************************************************************************/
 /*            Cortex-M4 Processor Interruption and Exception Handlers         */ 
 /******************************************************************************/
@@ -52,7 +53,10 @@ extern volatile int sysTickFlag;
 void SysTick_Handler(void)
 {
   /* USER CODE BEGIN SysTick_IRQn 0 */
-	sysTickFlag = 1;
+	adcTimer++;
+	updateMeasureForDisplayTimer++;
+	display7segTimer++;
+	timeDisplay1DigitTimer++;
   /* USER CODE END SysTick_IRQn 0 */
   HAL_IncTick();
   HAL_SYSTICK_IRQHandler();
