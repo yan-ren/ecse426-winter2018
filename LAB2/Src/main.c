@@ -73,6 +73,10 @@ int count = 0;
 float min_val = 10.0;
 float max_val = 0.0;
 float rms_counter = 0.0;
+															
+int sine_wave_array[11] = {242,156,88,39,10,0,10,39,88,156,242};
+															
+int sine_wave_counter = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -89,7 +93,7 @@ void display(float value);
 int getDigit(float value, int place);
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
-
+ 
 /* USER CODE END PFP */
 
 /* USER CODE BEGIN 0 */
@@ -129,20 +133,28 @@ int main(void)
 	float filtered_val = 0.0;
 	float results[3];
 	
-	
 	HAL_ADC_Start_IT(&hadc1);
 	
 	// Give a initial DAC value
-	int dac_val = 100;
+	int dac_val = 255;
 	HAL_DAC_Start(&hdac, DAC_CHANNEL_1);
 	// dac_val/255 * 3.3
-	HAL_DAC_SetValue(&hdac, DAC_CHANNEL_1, DAC_ALIGN_8B_R, dac_val); 
+	HAL_DAC_SetValue(&hdac, DAC_CHANNEL_1, DAC_ALIGN_8B_R, dac_val);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
-  {
+  {	
+		
+		HAL_DAC_SetValue(&hdac, DAC_CHANNEL_1, DAC_ALIGN_8B_R, sine_wave_array[sine_wave_counter]);
+		
+		if(sine_wave_counter == 10){
+			sine_wave_counter = 0;
+		}else{
+			++sine_wave_counter;
+		}
+		
 		if (adcTimer >= ADC_PERIOD) { 								/* 50Hz */
 			adcTimer = 0;
 			HAL_ADC_Start(&hadc1); 								/* start ADC conversion */
@@ -154,7 +166,7 @@ int main(void)
 				FIR_C(adc_val, &filtered_val);
 				float voltage_reading = 3.3 * filtered_val / 255.0;
 				
-				plot_point2(voltage_reading, results);
+				plot_point1(voltage_reading, results);
 				
 				printf("MRS: %f, MIN: %f, MAX: %f\n", results[0], results[1], results[2]);
 
