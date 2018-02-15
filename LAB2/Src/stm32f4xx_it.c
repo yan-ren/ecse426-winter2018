@@ -54,7 +54,7 @@ void SysTick_Handler(void)
 {
   /* USER CODE BEGIN SysTick_IRQn 0 */
 	adcTimer++;
-	updateMeasureForDisplayTimer++;
+	pushButtonTimer++;
 	display7segTimer++;
 	timeDisplay1DigitTimer++;
   /* USER CODE END SysTick_IRQn 0 */

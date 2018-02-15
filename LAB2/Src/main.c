@@ -52,7 +52,7 @@ DAC_HandleTypeDef hdac;
 /* USER CODE BEGIN PV */
 /* Global variables ----------------------------------------------------------*/
 volatile int adcTimer = 0;
-volatile int updateMeasureForDisplayTimer = 500000;
+volatile int pushButtonTimer = 0;
 volatile int display7segTimer = 0;
 volatile int digitToDisplay = 0;
 volatile int timeDisplay1DigitTimer = 0;
@@ -60,6 +60,12 @@ volatile int timeDisplay1DigitTimer = 0;
 /* Private variables ---------------------------------------------------------*/
 int x[] = {0, 0, 0, 0, 0};
 float b[] = {0.2, 0.2, 0.2, 0.2, 0.2};
+float RMS_MIN_MAX_buffer[] = {0.0, 0.0, 0.0, 0.0, 0.0,
+															0.0, 0.0, 0.0, 0.0, 0.0,
+															0.0, 0.0, 0.0, 0.0, 0.0,
+															0.0, 0.0, 0.0, 0.0, 0.0};
+int RMS_MIN_MAX_counter = 0;
+	
 volatile int sysTickFlag;
 int displayMode = 0;
 
@@ -75,7 +81,8 @@ static void MX_GPIO_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_DAC_Init(void);
 void FIR_C(int input, float *output);
-void plot_point(float, float *);
+void plot_point1(float, float *);
+void plot_point2(float, float *);
 int blueButtonPressed();
 void displayLEDValue(int number, int position);
 void display(float value);
@@ -126,8 +133,9 @@ int main(void)
 	HAL_ADC_Start_IT(&hadc1);
 	
 	// Give a initial DAC value
-	int dac_val = 0x60;
+	int dac_val = 100;
 	HAL_DAC_Start(&hdac, DAC_CHANNEL_1);
+	// dac_val/255 * 3.3
 	HAL_DAC_SetValue(&hdac, DAC_CHANNEL_1, DAC_ALIGN_8B_R, dac_val); 
   /* USER CODE END 2 */
 
@@ -146,7 +154,7 @@ int main(void)
 				FIR_C(adc_val, &filtered_val);
 				float voltage_reading = 3.3 * filtered_val / 255.0;
 				
-				plot_point(voltage_reading, results);
+				plot_point2(voltage_reading, results);
 				
 				printf("MRS: %f, MIN: %f, MAX: %f\n", results[0], results[1], results[2]);
 
@@ -155,31 +163,39 @@ int main(void)
 		
 		if(display7segTimer >= DISPLAY_7_SEGMENT_PERIOD) {
 			display7segTimer = 0;
-			
+			display(results[displayMode]); 														/* display on 7-segment display */
+			//displayLEDValue(2, 4);
+		}
+		
+		if(pushButtonTimer >= PUSH_BUTTON_PERIOD) {
+			pushButtonTimer = 0;
 			// When holding the blue button on the board, switch display mode by turn on LED 
 				if ( blueButtonPressed() == 1){
 				  displayMode = displayMode + 1;
 					displayMode = displayMode % 3;
 				}
-				HAL_GPIO_WritePin(GPIOD, LD6_Pin, GPIO_PIN_RESET);
-				HAL_GPIO_WritePin(GPIOD, LD4_Pin, GPIO_PIN_RESET);
-				HAL_GPIO_WritePin(GPIOD, LD3_Pin, GPIO_PIN_RESET);
+//				HAL_GPIO_WritePin(GPIOD, LD6_Pin, GPIO_PIN_RESET);
+//				HAL_GPIO_WritePin(GPIOD, LD4_Pin, GPIO_PIN_RESET);
+//				HAL_GPIO_WritePin(GPIOD, LD3_Pin, GPIO_PIN_RESET);
 				switch(displayMode) {
 					case 0:
 						HAL_GPIO_WritePin(GPIOD, LD6_Pin, GPIO_PIN_SET);//MRS BLUE
+					  HAL_GPIO_WritePin(GPIOD, LD4_Pin, GPIO_PIN_RESET);
+				    HAL_GPIO_WritePin(GPIOD, LD3_Pin, GPIO_PIN_RESET);
 						break;
 					case 1:
 						HAL_GPIO_WritePin(GPIOD, LD4_Pin, GPIO_PIN_SET);//MIN	GREEN
+					  HAL_GPIO_WritePin(GPIOD, LD6_Pin, GPIO_PIN_RESET);
+				    HAL_GPIO_WritePin(GPIOD, LD3_Pin, GPIO_PIN_RESET);
 						break;
 					case 2:
 						HAL_GPIO_WritePin(GPIOD, LD3_Pin, GPIO_PIN_SET);//MAX	ORANGE
+					  HAL_GPIO_WritePin(GPIOD, LD6_Pin, GPIO_PIN_RESET);
+				    HAL_GPIO_WritePin(GPIOD, LD4_Pin, GPIO_PIN_RESET);
 						break;
 					default:
 						break;		
 				}	
-				
-			display(results[displayMode]); 														/* display on 7-segment display */
-			//displayLEDValue(2, 4);
 		}
 				
 	}
@@ -500,8 +516,8 @@ int blueButtonPressed(){
 	}
 }
 
-
-void plot_point(float input, float* output) {
+void plot_point1(float input, float* output) {
+	
 	if(count == 0) {
 		min_val = input;
 		max_val = input;
@@ -515,6 +531,30 @@ void plot_point(float input, float* output) {
 	output[0] = sqrt(rms_counter / count);
 	output[1] = min_val;
 	output[2] = max_val;
+}
+
+void plot_point2(float input, float* output) {
+	float rms = 0.0;
+	float min = RMS_MIN_MAX_buffer[0];
+	float max = RMS_MIN_MAX_buffer[0];
+	
+	RMS_MIN_MAX_buffer[RMS_MIN_MAX_counter] = input;
+	int i;
+	for(i = 0; i < (sizeof(RMS_MIN_MAX_buffer) / sizeof(RMS_MIN_MAX_buffer[0])); i++){
+		rms += RMS_MIN_MAX_buffer[i] * RMS_MIN_MAX_buffer[i];
+		if(RMS_MIN_MAX_buffer[i] < min){
+			min = RMS_MIN_MAX_buffer[i];
+		}
+		if(RMS_MIN_MAX_buffer[i] > max){
+			max = RMS_MIN_MAX_buffer[i];
+		}
+	}
+	rms = sqrt(rms/20);
+	
+	RMS_MIN_MAX_counter = (RMS_MIN_MAX_counter + 1) % (sizeof(RMS_MIN_MAX_buffer) / sizeof(RMS_MIN_MAX_buffer[0]));
+	output[0] = rms;
+	output[1] = min;
+	output[2] = max;
 }
 
 

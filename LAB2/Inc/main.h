@@ -110,28 +110,29 @@
 #define MEMS_INT2_GPIO_Port GPIOE
 
 /* USER CODE BEGIN Private defines */
-#define SEG7_A GPIO_PIN_7			//Pin PE7  brown cable
-#define SEG7_B GPIO_PIN_8			//Pin PE8  brown cable
-#define SEG7_C GPIO_PIN_9			//Pin PE9  yellow cable
-#define SEG7_D GPIO_PIN_10		//Pin PE10 yellow cable
-#define SEG7_E GPIO_PIN_11		//Pin PE11 gray cable
-#define SEG7_F GPIO_PIN_12		//Pin PE12 gray cable
-#define SEG7_G GPIO_PIN_13		//Pin PE13 green cable
-#define SEG7_DP GPIO_PIN_14		//Pin PE14 green cable
+#define SEG7_A GPIO_PIN_7			//Pin PE7
+#define SEG7_B GPIO_PIN_8			//Pin PE8
+#define SEG7_C GPIO_PIN_9			//Pin PE9
+#define SEG7_D GPIO_PIN_10		//Pin PE10
+#define SEG7_E GPIO_PIN_11		//Pin PE11
+#define SEG7_F GPIO_PIN_12		//Pin PE12
+#define SEG7_G GPIO_PIN_13		//Pin PE13
+#define SEG7_DP GPIO_PIN_14		//Pin PE14
 
-#define SEG7_OUT1 GPIO_PIN_2		//Pin PE2 white cable
-#define SEG7_OUT2 GPIO_PIN_4		//Pin PE4 red cable
-#define SEG7_OUT3 GPIO_PIN_5		//Pin PE5 brown cable
-#define SEG7_OUT4 GPIO_PIN_6		//Pin PE6 white cable 
+#define SEG7_OUT1 GPIO_PIN_2		//Pin PE2
+#define SEG7_OUT2 GPIO_PIN_4		//Pin PE4
+#define SEG7_OUT3 GPIO_PIN_5		//Pin PE5
+#define SEG7_OUT4 GPIO_PIN_6		//Pin PE6
 
-#define ADC_PERIOD 20000 // systick every 1micro seconds
+#define ADC_PERIOD 20000 // systick every 1micro seconds *200000 -> 50Hz
 #define DISPLAY_7_SEGMENT_PERIOD 1 				/* if too high causes dimming */
-#define TIME_DISPLAY_1_DIGIT_PERIOD 200
+#define TIME_DISPLAY_1_DIGIT_PERIOD 2000
+#define PUSH_BUTTON_PERIOD 200000 // 5Hz
 
 /* USER CODE END Private defines */
 
 extern volatile int adcTimer;
-extern volatile int updateMeasureForDisplayTimer;
+extern volatile int pushButtonTimer;
 extern volatile int display7segTimer;
 extern volatile int timeDisplay1DigitTimer;
 
