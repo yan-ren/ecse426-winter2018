@@ -1,0 +1,28 @@
+--cpu=Cortex-M4.fp
+"g15_lab3\startup_stm32f407xx.o"
+"g15_lab3\stm32f4xx_hal_pwr_ex.o"
+"g15_lab3\stm32f4xx_hal_cortex.o"
+"g15_lab3\stm32f4xx_hal_flash.o"
+"g15_lab3\stm32f4xx_hal_gpio.o"
+"g15_lab3\stm32f4xx_hal_tim_ex.o"
+"g15_lab3\stm32f4xx_hal_flash_ex.o"
+"g15_lab3\stm32f4xx_hal.o"
+"g15_lab3\stm32f4xx_hal_adc.o"
+"g15_lab3\stm32f4xx_hal_adc_ex.o"
+"g15_lab3\stm32f4xx_hal_dma_ex.o"
+"g15_lab3\stm32f4xx_hal_tim.o"
+"g15_lab3\stm32f4xx_hal_rcc.o"
+"g15_lab3\stm32f4xx_hal_pwr.o"
+"g15_lab3\stm32f4xx_hal_rcc_ex.o"
+"g15_lab3\stm32f4xx_hal_dma.o"
+"g15_lab3\stm32f4xx_hal_flash_ramfunc.o"
+"g15_lab3\system_stm32f4xx.o"
+"g15_lab3\main.o"
+"g15_lab3\stm32f4xx_it.o"
+"g15_lab3\stm32f4xx_hal_msp.o"
+"g15_lab3\fput_debug.o"
+"g15_lab3\keypad.o"
+--library_type=microlib --strict --scatter "G15_LAB3\G15_LAB3.sct"
+--summary_stderr --info summarysizes --map --load_addr_map_info --xref --callgraph --symbols
+--info sizes --info totals --info unused --info veneers
+--list "G15_LAB3.map" -o G15_LAB3\G15_LAB3.axf
