@@ -114,7 +114,22 @@
 #define MEMS_INT2_GPIO_Port GPIOE
 
 /* USER CODE BEGIN Private defines */
+#define START_STATE 0
+#define ONE_TAP_STATE 1
+#define TWO_TAP_STATE 2
 
+#define GREEN		GPIO_PIN_12	// right
+#define ORANGE	GPIO_PIN_13	// down
+#define RED			GPIO_PIN_14	// left
+#define	BLUE		GPIO_PIN_15	// up
+
+#define PI		3.14159265
+
+#define TAP_DETECT_PERIOD 10
+#define TAP_CHECK_PERIOD 1
+
+extern volatile int tapDetectTimer;
+extern volatile int tapCheckTimer;
 /* USER CODE END Private defines */
 
 void _Error_Handler(char *, int);

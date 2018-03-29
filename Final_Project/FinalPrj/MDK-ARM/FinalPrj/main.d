@@ -34,6 +34,5 @@ finalprj\main.o: ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_tim.h
 finalprj\main.o: ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_tim_ex.h
 finalprj\main.o: ../Drivers/STM32F4xx_HAL_Driver/Inc/stm32f4xx_hal_uart.h
 finalprj\main.o: ../Inc/lis3dsh.h
-finalprj\main.o: ../Inc/adc.h
-finalprj\main.o: ../Inc/tim.h
 finalprj\main.o: ../Inc/usart.h
+finalprj\main.o: C:\Keil_v5\ARM\ARMCC\Bin\..\include\math.h
