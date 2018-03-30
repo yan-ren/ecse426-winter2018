@@ -55,7 +55,7 @@ TIM_HandleTypeDef htim3;
 int x[] = {0, 0, 0, 0, 0};
 float b[] = {0.2, 0.2, 0.2, 0.2, 0.2};
 //
-//ADC variables
+//ADC variables, ADC frequency 10kHz
 uint32_t adcRawValue;
 float adcFilteredValue = 0.0;
 const int audioDataBufferSize = 10000;
@@ -96,6 +96,9 @@ void Scenario_Signal(int ledtag);
 //
 // Accelerator detect functions
 void tapFound(float* value, float* previous);
+//
+// Blue button
+int blueButtonPressed(void);
 
 int main(void)
 {
@@ -226,12 +229,14 @@ int main(void)
 				//transmit
 				Scenario_Signal(1); // blue led showing transmitting
 				
-				TM_DelayMillis(3000);// delay 1s
+				TM_DelayMillis(500);// delay 1s
 				
 			}
 			
 			// if push button detected, go back to start state
-			
+			if(blueButtonPressed()){
+				systemState = START_STATE;
+			}
 		}
 		
 		while(systemState == TWO_TAP_STATE){
@@ -240,7 +245,9 @@ int main(void)
 			
 			
 			// if push button detected, go back to start state
-			
+			if(blueButtonPressed()){
+				systemState = START_STATE;
+			}
 		}
 		
   }
@@ -568,13 +575,13 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
             the HAL_ADC_ConvCpltCallback could be implemented in the user file
    */
 	if(systemState == ONE_TAP_STATE){
-		while(audioBufferCounter < audioDataBufferSize && recording == 1){
+		if(audioBufferCounter < audioDataBufferSize && recording == 1){
 			adcRawValue = HAL_ADC_GetValue(&hadc1);
 			
 			FIR_C(adcRawValue, &adcFilteredValue);
-			float adcConvertedValue = adcFilteredValue/8;
-			audioDataBuffer[audioBufferCounter] = (uint8_t) adcConvertedValue;
-			printf("adcConvertedValue: %i\n", (uint8_t) adcConvertedValue);
+//			float adcConvertedValue = adcFilteredValue/8;
+			audioDataBuffer[audioBufferCounter] = (uint8_t) adcFilteredValue;
+//			printf("adcConvertedValue: %i\n", (uint8_t) adcConvertedValue);
 			audioBufferCounter++;
 		}
 	}
@@ -613,6 +620,16 @@ void ledON()
 	HAL_GPIO_WritePin(GPIOD, ORANGE ,GPIO_PIN_SET);
 	HAL_GPIO_WritePin(GPIOD, RED ,GPIO_PIN_SET);
 	HAL_GPIO_WritePin(GPIOD, BLUE ,GPIO_PIN_SET);
+}
+
+int blueButtonPressed(){
+	if ( HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0 ) == SET) {
+		return 1;
+	}
+	else 
+	{
+		return 0;
+	}
 }
 
 /**

@@ -125,8 +125,8 @@
 
 #define PI		3.14159265
 
-#define TAP_DETECT_PERIOD 10
-#define TAP_CHECK_PERIOD 1
+#define TAP_DETECT_PERIOD 40 // 25Hz
+#define TAP_CHECK_PERIOD 1500
 
 extern volatile int tapDetectTimer;
 extern volatile int tapCheckTimer;
