@@ -60,6 +60,7 @@ void SysTick_Handler(void)
 	MyFlag ++;
 	tapCheckTimer++;
 	tapDetectTimer++;
+	pitchRollTimer++;
   /* USER CODE END SysTick_IRQn 1 */
 }
 

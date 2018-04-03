@@ -127,9 +127,11 @@
 
 #define TAP_DETECT_PERIOD 40 // 25Hz
 #define TAP_CHECK_PERIOD 1500
+#define PITCH_ROLL_PEROID 10	// 100Hz
 
 extern volatile int tapDetectTimer;
 extern volatile int tapCheckTimer;
+extern volatile int pitchRollTimer;
 /* USER CODE END Private defines */
 
 void _Error_Handler(char *, int);

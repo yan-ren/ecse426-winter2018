@@ -66,8 +66,13 @@ int recording = 0;
 volatile int tapDetectTimer = 0;
 volatile int tapCheckTimer = 0;
 int taps = 0;
-//
-
+// USART variables
+uint8_t transBuffer[1] = {0};
+// pitch roll variables
+volatile int pitchRollTimer = 0;
+const int pitchRollDataBufferSize = 1000;
+uint8_t pitchDataBuffer [pitchRollDataBufferSize];
+uint8_t rollDataBuffer [pitchRollDataBufferSize];
 
 
 uint8_t status;
@@ -96,6 +101,8 @@ void Scenario_Signal(int ledtag);
 //
 // Accelerator detect functions
 void tapFound(float* value, float* previous);
+float calcPitch(float* xyz);
+float calcRoll(float* xyz);
 //
 // Blue button
 int blueButtonPressed(void);
@@ -118,8 +125,6 @@ int main(void)
 	HAL_ADC_Start_IT(&hadc1);
 	
 	TM_Delay_Init();
-	// and example of sending a data through UART, but you need to configure the UART block:
-	//	HAL_UART_Transmit(&huart5,"FinalProject\n",14,2000); 
 	
 	//
 	float accelOutput[3];
@@ -208,29 +213,28 @@ int main(void)
 			//recording
 			recording = 1;
 			Scenario_Signal(0); // green led showing recording
-			// testing
-			
-//			HAL_ADC_Start(&hadc1); 								/* start ADC conversion */
-//			
-//			/* wait for the conversion to be done and get data */
-//			if (HAL_ADC_PollForConversion(&hadc1, 1000000) == HAL_OK) { 
-//				adcRawValue = HAL_ADC_GetValue(&hadc1); /* get the value */
-//				printf("adcRawValue: %i \n", adcRawValue);
-
-//			}
-			//adcRawValue = HAL_ADC_GetValue(&hadc1);
-			printf("adc raw value: %i \n", adcRawValue);
-			//
 			
 			//check if recording finish
-			if(audioBufferCounter == audioDataBufferSize){
+			if(audioBufferCounter == audioDataBufferSize)
+			{
 				recording = 0;
 				audioBufferCounter = 0;
+				
 				//transmit
 				Scenario_Signal(1); // blue led showing transmitting
 				
-				TM_DelayMillis(500);// delay 1s
+				transBuffer[0] = 0;
+				HAL_UART_Transmit_IT(&huart5, transBuffer, 1); // send signal to indicate voice data
+				while (HAL_UART_GetState(&huart5) != HAL_UART_STATE_READY){};
+				for(int i = 0; i < audioDataBufferSize; i++)
+				{
+					transBuffer[0] = audioDataBuffer[i];
+					//printf("%u\n", trans_buffer[0]);
+					HAL_UART_Transmit_IT(&huart5, transBuffer, 1);
+					while (HAL_UART_GetState(&huart5) != HAL_UART_STATE_READY){};
+				}
 				
+//				TM_DelayMillis(500);// delay 1s
 			}
 			
 			// if push button detected, go back to start state
@@ -242,6 +246,54 @@ int main(void)
 		while(systemState == TWO_TAP_STATE){
 			Scenario_Signal(2); // RED led showing TWO_TAP_STATE
 			// read accelerameter and calculate pitch and roll
+			
+			for(int i=0; i< pitchRollDataBufferSize; i++)
+			{
+				if(pitchRollTimer >= PITCH_ROLL_PEROID)
+				{
+					pitchRollTimer = 0;
+					
+					LIS3DSH_Read (&status, LIS3DSH_STATUS, 1);
+					//The first four bits denote if we have new data on all XYZ axes, 
+					//Z axis only, Y axis only or Z axis only. If any or all changed, proceed
+					if ((status & 0x0F) != 0x00)
+					{
+						// read ACC
+						LIS3DSH_ReadACC(accelOutput);
+						
+						// give pitch and roll angles
+						float pitchOutput = calcPitch(accelOutput);	
+						float rollOutput = calcRoll(accelOutput);
+						// save to buffer array
+						printf("pitch: %f, roll: %f \n", pitchOutput, rollOutput);		
+					}
+				}
+			}
+			
+			// transmit
+			Scenario_Signal(1); // blue led showing transmitting
+			
+			// transmit pitch
+			transBuffer[0] = 1;
+			HAL_UART_Transmit_IT(&huart5, transBuffer, 1); // send signal to indicate pitch data
+			while (HAL_UART_GetState(&huart5) != HAL_UART_STATE_READY){};
+			for(int i=0; i< pitchRollDataBufferSize; i++)
+			{
+				transBuffer[0] = pitchDataBuffer[i];
+				HAL_UART_Transmit_IT(&huart5, transBuffer, 1);
+				while (HAL_UART_GetState(&huart5) != HAL_UART_STATE_READY){};
+			}
+			
+			// transmit roll
+			transBuffer[0] = 2;
+			HAL_UART_Transmit_IT(&huart5, transBuffer, 1); // send signal to indicate roll data
+			while (HAL_UART_GetState(&huart5) != HAL_UART_STATE_READY){};
+			for(int i=0; i< pitchRollDataBufferSize; i++)
+			{
+				transBuffer[0] = rollDataBuffer[i];
+				HAL_UART_Transmit_IT(&huart5, transBuffer, 1);
+				while (HAL_UART_GetState(&huart5) != HAL_UART_STATE_READY){};
+			}
 			
 			
 			// if push button detected, go back to start state
