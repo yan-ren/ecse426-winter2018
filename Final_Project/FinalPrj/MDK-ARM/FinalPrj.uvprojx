@@ -530,11 +530,6 @@
               <FileType>5</FileType>
               <FilePath>..\Inc\LIS3DSH.h</FilePath>
             </File>
-            <File>
-              <FileName>usart.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Src\usart.c</FilePath>
-            </File>
           </Files>
         </Group>
         <Group>

@@ -39,7 +39,6 @@
 #include "main.h"
 #include "stm32f4xx_hal.h"
 #include "lis3dsh.h"
-#include "usart.h"
 #include "math.h"
 // grey PD2
 // PURPLE PC12
@@ -50,6 +49,7 @@ LIS3DSH_InitTypeDef 		Acc_instance;
 ADC_HandleTypeDef hadc1;
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
+UART_HandleTypeDef huart5;
 /* Private variables ---------------------------------------------------------*/
 //FIR_C filters
 int x[] = {0, 0, 0, 0, 0};
@@ -80,11 +80,12 @@ float Buffer[3];
 float accX, accY, accZ;
 uint8_t MyFlag = 0;
 	
-int systemState = ONE_TAP_STATE;	
+int systemState = START_STATE;	
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
+void MX_UART5_Init(void);
 void MX_ADC1_Init(void);
 void MX_TIM2_Init(void);
 void MX_TIM3_Init(void);
@@ -121,7 +122,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
 	// Step(1): Start the Timer as interrupt
 	HAL_TIM_Base_Start(&htim2);
-//	HAL_TIM_Base_Start_IT(&htim3);
+//  HAL_TIM_Base_Start_IT(&htim3);
 	HAL_ADC_Start_IT(&hadc1);
 	
 	TM_Delay_Init();
@@ -132,28 +133,7 @@ int main(void)
 	//
 
   while (1)
-  {
- 
-//		if (MyFlag/200)
-//		{
-
-//			MyFlag = 0;
-//			//Reading the accelerometer status register
-//				LIS3DSH_Read (&status, LIS3DSH_STATUS, 1);
-//				//The first four bits denote if we have new data on all XYZ axes, 
-//		   	//Z axis only, Y axis only or Z axis only. If any or all changed, proceed
-//				if ((status & 0x0F) != 0x00)
-//				{
-//					// read ACC
-//					LIS3DSH_ReadACC(&Buffer[0]);
-//					accX = (float)Buffer[0];
-//					accY = (float)Buffer[1];
-//					accZ = (float)Buffer[2];
-//					printf("X: %4f     Y: %4f     Z: %4f \n", accX, accY, accZ);
-//					//
-//				}
-//			}
-		
+  {	
 		LIS3DSH_Read (&status, LIS3DSH_STATUS, 1);
 		//The first four bits denote if we have new data on all XYZ axes, 
 		//Z axis only, Y axis only or Z axis only. If any or all changed, proceed
@@ -181,10 +161,10 @@ int main(void)
 				{
 					// read ACC
 					LIS3DSH_ReadACC(accelOutput);
-//					accX = (float)accelOutput[0];
-//					accY = (float)accelOutput[1];
-//					accZ = (float)accelOutput[2];
-					//printf("first: X: %4f     Y: %4f     Z: %4f \n", accX, accY, accZ);
+					accX = (float)accelOutput[0];
+					accY = (float)accelOutput[1];
+					accZ = (float)accelOutput[2];
+					printf("first: X: %4f     Y: %4f     Z: %4f \n", accX, accY, accZ);
 					//
 					
 					// See if a tap has been found
@@ -234,7 +214,7 @@ int main(void)
 					while (HAL_UART_GetState(&huart5) != HAL_UART_STATE_READY){};
 				}
 				
-//				TM_DelayMillis(500);// delay 1s
+//				TM_DelayMillis(500);// delay 0.5s
 			}
 			
 			// if push button detected, go back to start state
@@ -247,10 +227,11 @@ int main(void)
 			Scenario_Signal(2); // RED led showing TWO_TAP_STATE
 			// read accelerameter and calculate pitch and roll
 			
-			for(int i=0; i< pitchRollDataBufferSize; i++)
+			for(int i=0; i< pitchRollDataBufferSize; )
 			{
 				if(pitchRollTimer >= PITCH_ROLL_PEROID)
 				{
+					
 					pitchRollTimer = 0;
 					
 					LIS3DSH_Read (&status, LIS3DSH_STATUS, 1);
@@ -265,8 +246,15 @@ int main(void)
 						float pitchOutput = calcPitch(accelOutput);	
 						float rollOutput = calcRoll(accelOutput);
 						// save to buffer array
-						printf("pitch: %f, roll: %f \n", pitchOutput, rollOutput);		
+						uint8_t anglePitch = (uint8_t)(pitchOutput + 90); // for display
+			      uint8_t angleRoll = (uint8_t)(rollOutput + 90); // for display
+						pitchDataBuffer[i] = anglePitch;
+						rollDataBuffer[i] = angleRoll;
+//						TM_DelayMillis(500);// delay 1s
+						printf("pitch: %f, roll: %f \n", pitchOutput, rollOutput);
+						printf("pitch: %d, roll: %d \n", anglePitch, angleRoll);						
 					}
+					i++;
 				}
 			}
 			
@@ -520,6 +508,25 @@ static void MX_GPIO_Init(void)
 
 }
 
+/* UART5 init function */
+void MX_UART5_Init(void)
+{
+
+  huart5.Instance = UART5;
+  huart5.Init.BaudRate = 115200;
+  huart5.Init.WordLength = UART_WORDLENGTH_8B;
+  huart5.Init.StopBits = UART_STOPBITS_1;
+  huart5.Init.Parity = UART_PARITY_NONE;
+  huart5.Init.Mode = UART_MODE_TX_RX;
+  huart5.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart5.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart5) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
+}
+
 /* ADC1 init function */
 static void MX_ADC1_Init(void)
 {
@@ -733,7 +740,7 @@ void tapFound(float* value, float* previous)
 	float Zdiff = (Zthis - Zprev);
 	
 	
-	if (Xdiff >= (fabs)(40.0) || Ydiff >= (fabs)(40.0) || Zdiff >= (fabs)(30.0))
+	if (Xdiff >= (fabs)(80.0) || Ydiff >= (fabs)(80.0) || Zdiff >= (fabs)(60.0))
 	{
 		taps++;
 	}
