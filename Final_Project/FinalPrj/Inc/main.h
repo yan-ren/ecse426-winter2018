@@ -127,7 +127,7 @@
 
 #define TAP_DETECT_PERIOD 10 // 100Hz
 #define TAP_CHECK_PERIOD 1000 // 0.1Hz
-#define PITCH_ROLL_PEROID 1 // 1000Hz
+#define PITCH_ROLL_PEROID 10 // 100Hz
 
 extern volatile int tapDetectTimer;
 extern volatile int tapCheckTimer;

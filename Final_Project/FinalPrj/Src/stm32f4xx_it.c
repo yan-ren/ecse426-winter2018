@@ -37,7 +37,7 @@
 #include "main.h"
 
 /* USER CODE BEGIN 0 */
-extern uint8_t MyFlag;
+//extern uint8_t MyFlag;
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
@@ -58,10 +58,10 @@ void SysTick_Handler(void)
   HAL_IncTick();
   HAL_SYSTICK_IRQHandler();
   /* USER CODE BEGIN SysTick_IRQn 1 */
-	MyFlag ++;
+	//MyFlag ++;
 	tapCheckTimer++;
 	tapDetectTimer++;
-	pitchRollTimer++;
+	pitchRollTimer++;	
   /* USER CODE END SysTick_IRQn 1 */
 }
 

@@ -51,10 +51,26 @@ TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
 UART_HandleTypeDef huart5;
 /* Private variables ---------------------------------------------------------*/
-//FIR_C filters
-int x[] = {0, 0, 0, 0, 0};
+//FIR_x filters
+float x[] = {0.0, 0.0, 0.0, 0.0, 0.0};
 float b[] = {0.2, 0.2, 0.2, 0.2, 0.2};
+//FIR_y filters
+float y[] = {0.0, 0.0, 0.0, 0.0, 0.0};
+//FIR_z filters
+float z[] = {0.0, 0.0, 0.0, 0.0, 0.0};
+//FIR_adc filters
+float adc[] = {0.0, 0.0, 0.0, 0.0, 0.0};
 //
+// ACC
+float accelOutput[3];
+float previousAccelOutput[3];
+float filteredAcc[3];
+int tapCheck = 1;
+int detectDelay = 0;
+int tapCheckTimes = 0;
+int tapCheckPeriod = 0;
+//
+
 //ADC variables, ADC frequency 10kHz
 uint32_t adcRawValue;
 float adcFilteredValue = 0.0;
@@ -66,6 +82,9 @@ int recording = 0;
 volatile int tapDetectTimer = 0;
 volatile int tapCheckTimer = 0;
 int taps = 0;
+uint8_t status;
+const int tapDetectBufferSize = 50;
+uint8_t tapDetectBuffer [tapDetectBufferSize];
 // USART variables
 uint8_t transBuffer[1] = {0};
 // pitch roll variables
@@ -75,10 +94,10 @@ uint8_t pitchDataBuffer [pitchRollDataBufferSize];
 uint8_t rollDataBuffer [pitchRollDataBufferSize];
 
 
-uint8_t status;
-float Buffer[3];
+
+//float Buffer[3];
 float accX, accY, accZ;
-uint8_t MyFlag = 0;
+//uint8_t MyFlag = 0;
 	
 int systemState = START_STATE;	
 
@@ -94,7 +113,10 @@ void TM_Delay_Init(void);
 void TM_DelayMillis(uint32_t millis);
 
 void initializeACC			(void);
-void FIR_C(int input, float *output);
+void FIR_x(float input, float *output);
+void FIR_y(float input, float *output);
+void FIR_z(float input, float *output);
+void FIR_adc(float input, float *output);
 
 // LED operation functions
 void ledON(void);
@@ -102,6 +124,7 @@ void Scenario_Signal(int ledtag);
 //
 // Accelerator detect functions
 void tapFound(float* value, float* previous);
+void tapFound_2(void);
 float calcPitch(float* xyz);
 float calcRoll(float* xyz);
 //
@@ -128,30 +151,39 @@ int main(void)
 	TM_Delay_Init();
 	
 	//
-	float accelOutput[3];
-	float previousAccelOutput[3];
+	
 	//
-
-  while (1)
-  {	
+	//initialize filter
+	for(int i = 0; i <10; ){
 		LIS3DSH_Read (&status, LIS3DSH_STATUS, 1);
 		//The first four bits denote if we have new data on all XYZ axes, 
 		//Z axis only, Y axis only or Z axis only. If any or all changed, proceed
 		if ((status & 0x0F) != 0x00)
 		{
 			// read ACC
-			LIS3DSH_ReadACC(previousAccelOutput);
-//			accX = (float)accelOutput[0];
-//			accY = (float)accelOutput[1];
-//			accZ = (float)accelOutput[2];
-			//printf("first: X: %4f     Y: %4f     Z: %4f \n", accX, accY, accZ);
-			//
+			LIS3DSH_ReadACC(accelOutput);
+			FIR_x(accelOutput[0], &(filteredAcc[0]));
+			FIR_y(accelOutput[1], &(filteredAcc[1]));
+			FIR_z(accelOutput[2], &(filteredAcc[2]));
+
+			// the previous update
+			previousAccelOutput[0] = filteredAcc[0];
+			previousAccelOutput[1] = filteredAcc[1];
+			previousAccelOutput[2] = filteredAcc[2];
+			i++;
 		}
+	}
+	
+
+  while (1)
+  {	
+	
+	//
 		while(systemState == START_STATE){
 			ledON();
 			
-			// tap detection
-			if(tapDetectTimer >= TAP_DETECT_PERIOD){
+			if(tapDetectTimer >= TAP_DETECT_PERIOD)
+			{
 				tapDetectTimer = 0;
 				//
 				LIS3DSH_Read (&status, LIS3DSH_STATUS, 1);
@@ -161,32 +193,52 @@ int main(void)
 				{
 					// read ACC
 					LIS3DSH_ReadACC(accelOutput);
-					accX = (float)accelOutput[0];
-					accY = (float)accelOutput[1];
-					accZ = (float)accelOutput[2];
-					printf("first: X: %4f     Y: %4f     Z: %4f \n", accX, accY, accZ);
-					//
+					FIR_x(accelOutput[0], &(filteredAcc[0]));
+					FIR_y(accelOutput[1], &(filteredAcc[1]));
+					FIR_z(accelOutput[2], &(filteredAcc[2]));
+					printf("z: %f \n", filteredAcc[2]);
 					
-					// See if a tap has been found
-					tapFound(accelOutput, previousAccelOutput);
-			
-					// the previous update has to be after the tap found	
-					previousAccelOutput[0] = accelOutput[0];
-					previousAccelOutput[1] = accelOutput[1];
-					previousAccelOutput[2] = accelOutput[2];	
+					// TAP CHECKING
+					if(taps == 0){
+						tapFound(filteredAcc, previousAccelOutput);
+					}
+					
+					if(taps >= 1 && tapCheckTimes < 15 && detectDelay == 1){
+						tapCheckTimes ++;
+					}else{
+						tapCheckTimes = 0;
+						detectDelay = 0;
+						tapFound(filteredAcc, previousAccelOutput);
+					}
+					
+					if(taps >= 1){
+						tapCheckPeriod++;
+					}
+					
+					if(tapCheckPeriod>=200){
+						tapCheckPeriod = 0;
+						printf("state check");
+						if(taps == 1){
+							taps = 0;
+							systemState = ONE_TAP_STATE;
+							printf("one tap");
+						}else if (taps > 1){
+							taps = 0;
+							systemState = TWO_TAP_STATE;
+							printf("two taps");
+						}
+					}
+					// TAP CHECKING
+					
+					// the previous update
+					previousAccelOutput[0] = filteredAcc[0];
+					previousAccelOutput[1] = filteredAcc[1];
+					previousAccelOutput[2] = filteredAcc[2];
 				}
+				
+				
 			}
-			
-			if(tapCheckTimer >= TAP_CHECK_PERIOD){
-				tapCheckTimer = 0;
-				if(taps >= 2){
-					systemState = TWO_TAP_STATE;
-					taps = 0;
-				}else if(taps > 0 && taps < 2){
-					systemState = ONE_TAP_STATE;
-					taps = 0;
-				}
-			}
+
 		}
 		
 		while(systemState == ONE_TAP_STATE){
@@ -204,29 +256,35 @@ int main(void)
 				Scenario_Signal(1); // blue led showing transmitting
 				
 				transBuffer[0] = 0;
+				printf("send data: %d", transBuffer[0]);
 				HAL_UART_Transmit_IT(&huart5, transBuffer, 1); // send signal to indicate voice data
 				while (HAL_UART_GetState(&huart5) != HAL_UART_STATE_READY){};
-				for(int i = 0; i < audioDataBufferSize; i++)
-				{
-					transBuffer[0] = audioDataBuffer[i];
-					//printf("%u\n", trans_buffer[0]);
-					HAL_UART_Transmit_IT(&huart5, transBuffer, 1);
-					while (HAL_UART_GetState(&huart5) != HAL_UART_STATE_READY){};
-				}
+				HAL_UART_Transmit(&huart5, audioDataBuffer, 10000, 5000);
+				while (HAL_UART_GetState(&huart5) != HAL_UART_STATE_READY){};
+					
+//				for(int i = 0; i < audioDataBufferSize; i++)
+//				{
+//					transBuffer[0] = audioDataBuffer[i];
+//					//printf("%u\n", trans_buffer[0]);
+//					HAL_UART_Transmit_IT(&huart5, transBuffer, 1);
+//					while (HAL_UART_GetState(&huart5) != HAL_UART_STATE_READY){};
+//				}
+				systemState = START_STATE;
 				
 //				TM_DelayMillis(500);// delay 0.5s
 			}
 			
+			
 			// if push button detected, go back to start state
-			if(blueButtonPressed()){
-				systemState = START_STATE;
-			}
+//			if(blueButtonPressed()){
+//				systemState = START_STATE;
+//			}
 		}
 		
 		while(systemState == TWO_TAP_STATE){
 			Scenario_Signal(2); // RED led showing TWO_TAP_STATE
-			// read accelerameter and calculate pitch and roll
 			
+			// read accelerameter and calculate pitch and roll
 			for(int i=0; i< pitchRollDataBufferSize; )
 			{
 				if(pitchRollTimer >= PITCH_ROLL_PEROID)
@@ -273,9 +331,9 @@ int main(void)
 			}
 			
 			// transmit roll
-			transBuffer[0] = 2;
-			HAL_UART_Transmit_IT(&huart5, transBuffer, 1); // send signal to indicate roll data
-			while (HAL_UART_GetState(&huart5) != HAL_UART_STATE_READY){};
+//			transBuffer[0] = 2;
+//			HAL_UART_Transmit_IT(&huart5, transBuffer, 1); // send signal to indicate roll data
+//			while (HAL_UART_GetState(&huart5) != HAL_UART_STATE_READY){};
 			for(int i=0; i< pitchRollDataBufferSize; i++)
 			{
 				transBuffer[0] = rollDataBuffer[i];
@@ -283,11 +341,12 @@ int main(void)
 				while (HAL_UART_GetState(&huart5) != HAL_UART_STATE_READY){};
 			}
 			
+			systemState = START_STATE;
 			
 			// if push button detected, go back to start state
-			if(blueButtonPressed()){
-				systemState = START_STATE;
-			}
+//			if(blueButtonPressed()){
+//				systemState = START_STATE;
+//			}
 		}
 		
   }
@@ -637,7 +696,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 		if(audioBufferCounter < audioDataBufferSize && recording == 1){
 			adcRawValue = HAL_ADC_GetValue(&hadc1);
 			
-			FIR_C(adcRawValue, &adcFilteredValue);
+			FIR_adc(adcRawValue, &adcFilteredValue);
 //			float adcConvertedValue = adcFilteredValue/8;
 			audioDataBuffer[audioBufferCounter] = (uint8_t) adcFilteredValue;
 //			printf("adcConvertedValue: %i\n", (uint8_t) adcConvertedValue);
@@ -718,6 +777,28 @@ float calcRoll(float* xyz)
 	return roll;
 }
 
+void tapFound_2(){
+	float max = tapDetectBuffer[0];
+  float min = tapDetectBuffer[0];
+
+  for (int i = 0; i < tapDetectBufferSize; i++)
+	{
+	  if (tapDetectBuffer[i] > max)
+		{
+		  max = tapDetectBuffer[i];
+		}
+	  else if (tapDetectBuffer[i] < min)
+		{
+		  min = tapDetectBuffer[i];
+		}
+	}
+	float Zdiff = (max - min);
+	if(Zdiff >= (fabs)(50.0)){
+		taps++;
+		TM_DelayMillis(500);
+	}
+}
+
 /**
    * @brief A function used to see a tap 
    * The difference is needed and a threshold of the difference of 2 values
@@ -740,25 +821,19 @@ void tapFound(float* value, float* previous)
 	float Zdiff = (Zthis - Zprev);
 	
 	
-	if (Xdiff >= (fabs)(80.0) || Ydiff >= (fabs)(80.0) || Zdiff >= (fabs)(60.0))
+	if (Zdiff >= (fabs)(150.0))
 	{
 		taps++;
+		detectDelay = 1;
+//		printf("tap found");
 	}
-	// could have a signal here to notify double tap instead of a flag/integer value
-//	if (TAP == 2 && msecond <= 1500000)
-//	{
-//		TAP = 0;
-//		DOUBLETAP++ ;
-//		msecond = 0;
-//	}
 	
 }
 
 /**
 	* @brief FIR filter
-	* @param value: sConfigOC.Pulse
 	*/
-void FIR_C(int input, float *output) {
+void FIR_x(float input, float *output) {
 	// shifting
 	int j;
 	for(j = 0; j < 4; ++j){
@@ -771,6 +846,66 @@ void FIR_C(int input, float *output) {
 	int i;
 	for(i = 0; i < 5; ++i) {
 		out += x[i] * b[4 - i];
+	}
+	*output = out;
+}
+
+/**
+	* @brief FIR filter
+	*/
+void FIR_y(float input, float *output) {
+	// shifting
+	int j;
+	for(j = 0; j < 4; ++j){
+		y[j] = y[j+1];
+	}
+	// add new element in the end
+	y[4] = input;
+
+	float out = 0.0;
+	int i;
+	for(i = 0; i < 5; ++i) {
+		out += y[i] * b[4 - i];
+	}
+	*output = out;
+}
+
+/**
+	* @brief FIR filter
+	*/
+void FIR_z(float input, float *output) {
+	// shifting
+	int j;
+	for(j = 0; j < 4; ++j){
+		z[j] = z[j+1];
+	}
+	// add new element in the end
+	z[4] = input;
+
+	float out = 0.0;
+	int i;
+	for(i = 0; i < 5; ++i) {
+		out += z[i] * b[4 - i];
+	}
+	*output = out;
+}
+
+/**
+	* @brief FIR filter
+	*/
+void FIR_adc(float input, float *output) {
+	// shifting
+	int j;
+	for(j = 0; j < 4; ++j){
+		adc[j] = adc[j+1];
+	}
+	// add new element in the end
+	adc[4] = input;
+
+	float out = 0.0;
+	int i;
+	for(i = 0; i < 5; ++i) {
+		out += adc[i] * b[4 - i];
 	}
 	*output = out;
 }
@@ -802,7 +937,7 @@ void initializeACC(void){
 	Acc_instance.Axes_Enable				= LIS3DSH_XYZ_ENABLE;
 	Acc_instance.AA_Filter_BW				= LIS3DSH_AA_BW_50;
 	Acc_instance.Full_Scale					= LIS3DSH_FULLSCALE_2;
-	Acc_instance.Power_Mode_Output_DataRate		= LIS3DSH_DATARATE_100;
+	Acc_instance.Power_Mode_Output_DataRate		= LIS3DSH_DATARATE_100;// 100Hz
 	Acc_instance.Self_Test					= LIS3DSH_SELFTEST_NORMAL;
 	Acc_instance.Continous_Update   = LIS3DSH_ContinousUpdate_Disabled;
 	
