@@ -83,8 +83,6 @@ volatile int tapDetectTimer = 0;
 volatile int tapCheckTimer = 0;
 int taps = 0;
 uint8_t status;
-const int tapDetectBufferSize = 50;
-uint8_t tapDetectBuffer [tapDetectBufferSize];
 // USART variables
 uint8_t transBuffer[1] = {0};
 // pitch roll variables
@@ -92,7 +90,7 @@ volatile int pitchRollTimer = 0;
 const int pitchRollDataBufferSize = 1000;
 uint8_t pitchDataBuffer [pitchRollDataBufferSize];
 uint8_t rollDataBuffer [pitchRollDataBufferSize];
-
+uint8_t sendBuffer[pitchRollDataBufferSize*2];
 
 
 //float Buffer[3];
@@ -124,7 +122,6 @@ void Scenario_Signal(int ledtag);
 //
 // Accelerator detect functions
 void tapFound(float* value, float* previous);
-void tapFound_2(void);
 float calcPitch(float* xyz);
 float calcRoll(float* xyz);
 //
@@ -177,8 +174,6 @@ int main(void)
 
   while (1)
   {	
-	
-	//
 		while(systemState == START_STATE){
 			ledON();
 			
@@ -223,6 +218,8 @@ int main(void)
 							systemState = ONE_TAP_STATE;
 							printf("one tap");
 						}else if (taps > 1){
+							tapCheckTimes = 0;
+							detectDelay = 0;
 							taps = 0;
 							systemState = TWO_TAP_STATE;
 							printf("two taps");
@@ -235,10 +232,7 @@ int main(void)
 					previousAccelOutput[1] = filteredAcc[1];
 					previousAccelOutput[2] = filteredAcc[2];
 				}
-				
-				
 			}
-
 		}
 		
 		while(systemState == ONE_TAP_STATE){
@@ -251,34 +245,20 @@ int main(void)
 			{
 				recording = 0;
 				audioBufferCounter = 0;
-				
+				printf("last element in audio buffer: %d", audioDataBuffer[audioDataBufferSize-1]);
 				//transmit
 				Scenario_Signal(1); // blue led showing transmitting
 				
 				transBuffer[0] = 0;
-				printf("send data: %d", transBuffer[0]);
+//				printf("send data: %d", transBuffer[0]);
 				HAL_UART_Transmit_IT(&huart5, transBuffer, 1); // send signal to indicate voice data
 				while (HAL_UART_GetState(&huart5) != HAL_UART_STATE_READY){};
-				HAL_UART_Transmit(&huart5, audioDataBuffer, 10000, 5000);
+				HAL_UART_Transmit(&huart5, audioDataBuffer, audioDataBufferSize, 5000);
 				while (HAL_UART_GetState(&huart5) != HAL_UART_STATE_READY){};
 					
-//				for(int i = 0; i < audioDataBufferSize; i++)
-//				{
-//					transBuffer[0] = audioDataBuffer[i];
-//					//printf("%u\n", trans_buffer[0]);
-//					HAL_UART_Transmit_IT(&huart5, transBuffer, 1);
-//					while (HAL_UART_GetState(&huart5) != HAL_UART_STATE_READY){};
-//				}
 				systemState = START_STATE;
-				
 //				TM_DelayMillis(500);// delay 0.5s
 			}
-			
-			
-			// if push button detected, go back to start state
-//			if(blueButtonPressed()){
-//				systemState = START_STATE;
-//			}
 		}
 		
 		while(systemState == TWO_TAP_STATE){
@@ -299,59 +279,48 @@ int main(void)
 					{
 						// read ACC
 						LIS3DSH_ReadACC(accelOutput);
+						FIR_x(accelOutput[0], &(filteredAcc[0]));
+						FIR_y(accelOutput[1], &(filteredAcc[1]));
+						FIR_z(accelOutput[2], &(filteredAcc[2]));
 						
 						// give pitch and roll angles
-						float pitchOutput = calcPitch(accelOutput);	
-						float rollOutput = calcRoll(accelOutput);
+						float pitchOutput = calcPitch(filteredAcc);	
+						float rollOutput = calcRoll(filteredAcc);
 						// save to buffer array
 						uint8_t anglePitch = (uint8_t)(pitchOutput + 90); // for display
 			      uint8_t angleRoll = (uint8_t)(rollOutput + 90); // for display
 						pitchDataBuffer[i] = anglePitch;
 						rollDataBuffer[i] = angleRoll;
 //						TM_DelayMillis(500);// delay 1s
-						printf("pitch: %f, roll: %f \n", pitchOutput, rollOutput);
-						printf("pitch: %d, roll: %d \n", anglePitch, angleRoll);						
+//						printf("pitch: %f, roll: %f \n", pitchOutput, rollOutput);
+						printf("pitch: %d, roll: %d \n", anglePitch, angleRoll);
+						i++;						
 					}
-					i++;
+					
 				}
 			}
-			
+//			printf("last element in pitch roll buffer: %d", pitchDataBuffer[pitchRollDataBufferSize-1]);
 			// transmit
 			Scenario_Signal(1); // blue led showing transmitting
 			
-			// transmit pitch
+			// transmit
 			transBuffer[0] = 1;
 			HAL_UART_Transmit_IT(&huart5, transBuffer, 1); // send signal to indicate pitch data
 			while (HAL_UART_GetState(&huart5) != HAL_UART_STATE_READY){};
-			for(int i=0; i< pitchRollDataBufferSize; i++)
-			{
-				transBuffer[0] = pitchDataBuffer[i];
-				HAL_UART_Transmit_IT(&huart5, transBuffer, 1);
-				while (HAL_UART_GetState(&huart5) != HAL_UART_STATE_READY){};
-			}
 			
-			// transmit roll
-//			transBuffer[0] = 2;
-//			HAL_UART_Transmit_IT(&huart5, transBuffer, 1); // send signal to indicate roll data
-//			while (HAL_UART_GetState(&huart5) != HAL_UART_STATE_READY){};
-			for(int i=0; i< pitchRollDataBufferSize; i++)
-			{
-				transBuffer[0] = rollDataBuffer[i];
-				HAL_UART_Transmit_IT(&huart5, transBuffer, 1);
-				while (HAL_UART_GetState(&huart5) != HAL_UART_STATE_READY){};
+			for(int i=0;i<pitchRollDataBufferSize; i++ ){
+				sendBuffer[i] = pitchDataBuffer[i];
 			}
+			for(int i=0;i<pitchRollDataBufferSize;i++ ){
+				sendBuffer[i+pitchRollDataBufferSize] = rollDataBuffer[i];
+			}
+			HAL_UART_Transmit(&huart5, sendBuffer, 2000, 5000);
+			while (HAL_UART_GetState(&huart5) != HAL_UART_STATE_READY){};
 			
 			systemState = START_STATE;
-			
-			// if push button detected, go back to start state
-//			if(blueButtonPressed()){
-//				systemState = START_STATE;
-//			}
 		}
 		
   }
-
-
 }
 
 /** System Clock Configuration
@@ -776,29 +745,6 @@ float calcRoll(float* xyz)
 	
 	return roll;
 }
-
-void tapFound_2(){
-	float max = tapDetectBuffer[0];
-  float min = tapDetectBuffer[0];
-
-  for (int i = 0; i < tapDetectBufferSize; i++)
-	{
-	  if (tapDetectBuffer[i] > max)
-		{
-		  max = tapDetectBuffer[i];
-		}
-	  else if (tapDetectBuffer[i] < min)
-		{
-		  min = tapDetectBuffer[i];
-		}
-	}
-	float Zdiff = (max - min);
-	if(Zdiff >= (fabs)(50.0)){
-		taps++;
-		TM_DelayMillis(500);
-	}
-}
-
 /**
    * @brief A function used to see a tap 
    * The difference is needed and a threshold of the difference of 2 values
